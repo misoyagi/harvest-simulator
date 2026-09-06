@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>農作物 最適収穫時期シミュレータ</title>
+  <!-- Chart.js（グラフ描画ライブラリ）の読み込み -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+      background-color: #f4f6f8;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    }
+    h1 {
+      color: #22703e;
+      font-size: 24px;
+      margin-bottom: 20px;
+      border-bottom: 3px solid #22703e;
+      padding-bottom: 8px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 25px;
+    }
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: #f9fbf9;
+      border: 1px solid #e1e8e1;
+      padding: 18px;
+      border-radius: 8px;
+    }
+    .input-group {
+      margin-bottom: 15px;
+    }
+    .input-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: bold;
+      color: #444;
+      margin-bottom: 4px;
+    }
+    .input-group input {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .results {
+      background: #eef7f0;
+      border: 1px solid #22703e;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      text-align: center;
+    }
+    .result-box h3 {
+      margin: 0;
+      font-size: 12px;
+      color: #555;
+    }
+    .result-box .val {
+      font-size: 20px;
+      font-weight: bold;
+      color: #d90429;
+      margin-top: 5px;
+    }
+    .chart-container {
+      position: relative;
+      height: 400px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>農作物 最適収穫時期シミュレータ</h1>
+
+  <!-- 計算結果表示パネル -->
+  <div class="results">
+    <div class="result-box">
+      <h3>最適収穫日数 (t*)</h3>
+      <div class="val" id="res-t">-</div>
+    </div>
+    <div class="result-box">
+      <h3>最大純利益 P(t*)</h3>
+      <div class="val" id="res-P">-</div>
+    </div>
+    <div class="result-box">
+      <h3>前倒し効果 (ピーク時比)</h3>
+      <div class="val" id="res-diff" style="color:#22703e;">-</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- パラメータ入力フォーム -->
+    <div class="panel">
+      <h2 style="font-size: 16px; margin-top:0; color:#22703e;">パラメータ設定</h2>
+      
+      <div class="input-group">
+        <label for="m">品質ピーク日 (m) [日]</label>
+        <input type="number" id="m" value="20" step="1">
+      </div>
+      
+      <div class="input-group">
+        <label for="S0">最高品質評価値 (S₀) [万円]</label>
+        <input type="number" id="S0" value="500" step="10">
+      </div>
+      
+      <div class="input-group">
+        <label for="A">品質変化曲率 (A)</label>
+        <input type="number" id="A" value="1.0" step="0.1" min="0.1">
+      </div>
+
+      <div class="input-group">
+        <label for="c">日割りコスト (c) [万円/日]</label>
+        <input type="number" id="c" value="6.0" step="0.5">
+      </div>
+
+      <div class="input-group">
+        <label for="C0">初期固定コスト (C₀) [万円]</label>
+        <input type="number" id="C0" value="50" step="5">
+      </div>
+    </div>
+
+    <!-- リアルタイムグラフ -->
+    <div>
+      <div class="chart-container">
+        <canvas id="myChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let myChart = null;
+
+function calculateAndRender() {
+  // 1. パラメータの取得
+  const m = parseFloat(document.getElementById('m').value) || 0;
+  const S0 = parseFloat(document.getElementById('S0').value) || 0;
+  const A = parseFloat(document.getElementById('A').value) || 0.1;
+  const c = parseFloat(document.getElementById('c').value) || 0;
+  const C0 = parseFloat(document.getElementById('C0').value) || 0;
+
+  // 2. 最適値の計算
+  const t_opt = m - c / (2 * A);
+  const P_opt = S0 - C0 - c * m + (c * c) / (4 * A);
+  const diff = (c * c) / (4 * A); // P(t*) - P(m)
+
+  // 3. 結果テキストの更新
+  document.getElementById('res-t').innerText = t_opt.toFixed(1) + " 日";
+  document.getElementById('res-P').innerText = P_opt.toFixed(1) + " 万円";
+  document.getElementById('res-diff').innerText = "+" + diff.toFixed(1) + " 万円";
+
+  // 4. グラフ用データ系列の生成 (0日〜30日またはmの1.5倍まで)
+  const maxDay = Math.max(30, Math.ceil(m * 1.5));
+  const labels = [];
+  const dataS = [];
+  const dataC = [];
+  const dataP = [];
+
+  for (let t = 0; t <= maxDay; t += 0.5) {
+    labels.push(t);
+    const S = -A * Math.pow(t - m, 2) + S0;
+    const C = c * t + C0;
+    const P = S - C;
+
+    dataS.push(S);
+    dataC.push(C);
+    dataP.push(P);
+  }
+
+  // 5. Chart.js 描画/再描画
+  const ctx = document.getElementById('myChart').getContext('2d');
+
+  if (myChart) {
+    myChart.destroy(); // 既存のグラフを破棄して再描画
+  }
+
+  myChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: '品質評価関数 S(t)',
+          data: dataS,
+          borderColor: '#2b5c8f',
+          borderDash: [5, 5],
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false
+        },
+        {
+          label: '管理費用関数 C(t)',
+          data: dataC,
+          borderColor: '#d95f02',
+          borderDash: [2, 2],
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false
+        },
+        {
+          label: '総純利益関数 P(t)',
+          data: dataP,
+          borderColor: '#22703e',
+          borderWidth: 3,
+          pointRadius: 0,
+          fill: false
+        },
+        {
+          label: '最適収穫点 t*',
+          data: [{ x: t_opt, y: P_opt }],
+          backgroundColor: '#d90429',
+          borderColor: '#d90429',
+          pointRadius: 7,
+          pointHoverRadius: 9,
+          type: 'scatter'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: '経過日数 t (日)' },
+          min: 0,
+          max: maxDay
+        },
+        y: {
+          title: { display: true, text: '金額 (万円)' }
+        }
+      },
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `${context.dataset.label}: ${context.parsed.y.toFixed(1)} 万円`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// 入力変更時に自動で再計算・再描画するイベントリスナー設定
+['m', 'S0', 'A', 'c', 'C0'].forEach(id => {
+  document.getElementById(id).addEventListener('input', calculateAndRender);
+});
+
+// 初期実行
+calculateAndRender();
+</script>
+
+</body>
+</html>
